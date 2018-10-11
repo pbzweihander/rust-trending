@@ -8,6 +8,5 @@ A twitter bot ([@RustTrending](https://twitter.com/RustTrending)) to tweet [tren
 
 ```bash
 cp config.toml /srv/rust-trending/config.toml
-docker-compose build
 docker-compose up -d
 ```
