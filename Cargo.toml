@@ -1,0 +1,23 @@
+[package]
+name = "rust-trending"
+version = "0.1.0"
+authors = ["pbzweihander <sd852456@naver.com>"]
+
+[dependencies]
+redis = "0.9"
+config = "0.9"
+failure = "0.1"
+serde = "1.0"
+serde_derive = "1.0"
+url = "1.7"
+url_serde = "0.2"
+futures = "0.1"
+chrono = "0.4"
+serde_json = "1.0"
+hyper = "0.12"
+hyper-tls = "0.3"
+tokio = "0.1"
+futures-timer = "0.1"
+openssl-probe = "0.1"
+twitter-api = { git = "https://github.com/pbzweihander/twitter-api-rs", branch = "hyper" }
+oauth-client = { git = "https://github.com/pbzweihander/oauth-client-rs", branch = "hyper" }

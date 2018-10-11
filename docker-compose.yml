@@ -1,0 +1,20 @@
+version: '3'
+
+services:
+  redis:
+    image: redis:4-alpine
+    command: redis-server --appendonly yes
+    volumes:
+      - redis-data:/data
+
+  service:
+    build: .
+    environment:
+      - RUST_BACTRACE=1
+    depends_on:
+      - redis
+    volumes:
+      - /srv/rust-trending/config.toml:/app/config.toml
+
+volumes:
+  redis-data:

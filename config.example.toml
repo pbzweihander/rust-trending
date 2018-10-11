@@ -1,0 +1,10 @@
+redis_url = "redis://redis:6379"
+tweet_ttl = 604800
+fetch_interval = 60
+tweet_interval = 60
+
+[twitter_token]
+consumer_key = ""
+consumer_secret = ""
+access_key = ""
+access_secret = ""
