@@ -66,7 +66,7 @@ fn tweet_repo(
     let name = if repo.author != repo.name {
         format!("{} / {}: ", repo.author, repo.name)
     } else {
-        format!("{}", repo.name)
+        format!("{}: ", repo.name)
     };
     let stars = format!(" ★{}", repo.stars);
     let url = format!(" {}", repo.url);
