@@ -7,7 +7,7 @@ services:
     volumes:
       - redis-data:/data
 
-  service:
+  rust_trending:
     build: .
     environment:
       - RUST_BACTRACE=1
