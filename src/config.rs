@@ -4,7 +4,7 @@ extern crate url_serde;
 
 use Error;
 
-#[derive(Clone, Serialize, Deserialize, Debug)]
+#[derive(Clone, Deserialize, Debug)]
 pub struct Config {
     #[serde(with = "url_serde")]
     pub redis_url: url::Url,
@@ -14,7 +14,7 @@ pub struct Config {
     pub twitter_token: TwitterToken,
 }
 
-#[derive(Clone, Serialize, Deserialize, Debug)]
+#[derive(Clone, Deserialize, Debug)]
 pub struct TwitterToken {
     pub consumer_key: String,
     pub consumer_secret: String,
