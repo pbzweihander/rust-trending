@@ -115,24 +115,31 @@ impl RustTrending {
     pub fn run_loop(self) -> impl Future<Item = (), Error = Error> {
         use futures::future::ok;
         use futures::stream::{iter_ok, Stream};
+        use std::sync::Arc;
         use std::time::{Duration, Instant};
         use tokio::timer::Interval;
 
         let fetch_interval = Duration::from_secs(self.config.fetch_interval as u64);
         let tweet_interval = Duration::from_secs(self.config.tweet_interval as u64);
-        let storage = self.storage;
+        let storage = Arc::new(self.storage);
         let storage1 = storage.clone();
-        let token = self.token;
+        let token = Arc::new(self.token);
+        let blacklist = Arc::new(self.config.blacklist);
 
         let fetch_stream = Interval::new(Instant::now(), fetch_interval)
             .map(move |_| {
                 let storage = storage.clone();
+                let blacklist = blacklist.clone();
                 let repos = fetch_repos()
                     .map(|rs| iter_ok(rs))
                     .flatten_stream()
                     .and_then(move |r| storage.is_repo_already_tweeted(&r).map(|b| (r, b)))
                     .filter(|(_, is_repo_already_tweeted)| !is_repo_already_tweeted)
-                    .map(|(r, _)| r);
+                    .map(|(r, _)| r)
+                    .filter(move |r| {
+                        let blacklist = blacklist.clone();
+                        !blacklist.is_listed(&r)
+                    });
                 repos
             }).flatten()
             .map_err(|e| e.context("fetch stream error").into());
