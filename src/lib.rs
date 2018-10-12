@@ -82,7 +82,7 @@ fn tweet_repo(
     let tweet = format!("{}{}{}{}", name, description, stars, url);
     twitter_api::update_status(consumer, access, &tweet)
         .map(|_| Utc::now())
-        .map_err(|e| e.context("tweet error").into())
+        .map_err(|e| e.context("Tweet error").into())
 }
 
 pub struct RustTrending {
@@ -142,7 +142,7 @@ impl RustTrending {
                     });
                 repos
             }).flatten()
-            .map_err(|e| e.context("fetch stream error").into());
+            .map_err(|e| e.context("Fetch stream error").into());
 
         let tweet_future = Interval::new(Instant::now(), tweet_interval)
             .map_err(Into::into)
@@ -158,7 +158,7 @@ impl RustTrending {
                     .map(move |ts| {
                         println!("{}, tweeted {} - {}", ts, r2.author, r2.name);
                     })
-            }).map_err(|e| e.context("tweet stream error").into())
+            }).map_err(|e| e.context("Tweet stream error").into())
             .or_else(|e| {
                 err_log(e);
                 ok(())
