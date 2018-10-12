@@ -1,5 +1,6 @@
 # rust-trending
 
+[![docker automated build](https://img.shields.io/docker/build/pbzweihander/rust-trending.svg)](https://hub.docker.com/r/pbzweihander/rust-trending/)
 [![license: MIT](https://badgen.net/badge/license/MIT/green)](LICENSE)
 [![@RustTrending](https://badgen.net/badge//twitter?icon=twitter)](https://twitter.com/RustTrending)
 
