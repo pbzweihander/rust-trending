@@ -30,7 +30,7 @@ impl Storage {
         timestamp: DateTime<Utc>,
     ) -> impl Future<Item = (), Error = Error> {
         let repo_name = repo.name.clone();
-        let tweet_ttl = self.config.tweet_ttl.clone();
+        let tweet_ttl = self.config.tweet_ttl;
         let ts = timestamp.timestamp();
         self.client
             .get_async_connection()
