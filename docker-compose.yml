@@ -7,7 +7,7 @@ services:
     volumes:
       - redis-data:/data
 
-  rust_trending:
+  bot:
     image: pbzweihander/rust-trending:latest
     depends_on:
       - redis
