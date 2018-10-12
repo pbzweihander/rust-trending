@@ -29,7 +29,7 @@ use oauth_client::Token;
 
 const TWEET_LENGTH: usize = 280;
 
-fn err_log(e: Error) {
+fn err_log(e: &Error) {
     use chrono::Local;
     eprintln!("At {}", Local::now());
     eprintln!("Error: {}", e);
@@ -74,7 +74,7 @@ fn tweet_repo(
     let length_left = TWEET_LENGTH - (name.len() + stars.len() + url.len());
 
     let description = if repo.description.len() < length_left {
-        format!("{}", repo.description)
+        repo.description.to_string()
     } else {
         format!("{} ...", repo.description.split_at(length_left - 4).0)
     };
@@ -130,8 +130,8 @@ impl RustTrending {
             .map(move |_| {
                 let storage = storage.clone();
                 let blacklist = blacklist.clone();
-                let repos = fetch_repos()
-                    .map(|rs| iter_ok(rs))
+                fetch_repos()
+                    .map(iter_ok)
                     .flatten_stream()
                     .and_then(move |r| storage.is_repo_already_tweeted(&r).map(|b| (r, b)))
                     .filter(|(_, is_repo_already_tweeted)| !is_repo_already_tweeted)
@@ -139,12 +139,11 @@ impl RustTrending {
                     .filter(move |r| {
                         let blacklist = blacklist.clone();
                         !blacklist.is_listed(&r)
-                    });
-                repos
+                    })
             }).flatten()
             .map_err(|e| e.context("Fetch stream error").into());
 
-        let tweet_future = Interval::new(Instant::now(), tweet_interval)
+        Interval::new(Instant::now(), tweet_interval)
             .map_err(Into::into)
             .zip(fetch_stream)
             .for_each(move |(_, r)| {
@@ -158,12 +157,12 @@ impl RustTrending {
                     .map(move |ts| {
                         println!("{}, tweeted {} - {}", ts, r2.author, r2.name);
                     })
-            }).map_err(|e| e.context("Tweet stream error").into())
+            })
+            .map_err(Into::<Error>::into)
+            .map_err(|e| e.context("Tweet stream error").into())
             .or_else(|e| {
-                err_log(e);
+                err_log(&e);
                 ok(())
-            });
-
-        tweet_future
+            })
     }
 }
