@@ -2,8 +2,8 @@ extern crate failure;
 #[macro_use]
 extern crate serde_derive;
 extern crate chrono;
+#[macro_use]
 extern crate futures;
-extern crate futures_timer;
 extern crate hyper;
 extern crate hyper_tls;
 extern crate oauth_client;
@@ -22,10 +22,12 @@ use repo::Repo;
 use storage::Storage;
 
 use chrono::{DateTime, Utc};
-use futures::Future;
+use futures::{Future, Poll, Stream};
 use hyper::{Body, Client};
 use hyper_tls::HttpsConnector;
 use oauth_client::Token;
+use std::time::{Duration, Instant};
+use tokio::timer::Delay;
 
 const TWEET_LENGTH: usize = 280;
 
@@ -85,6 +87,57 @@ fn tweet_repo(
         .map_err(|e| e.context("Tweet error").into())
 }
 
+struct TimedStream<S, E>
+where
+    S: Stream<Error = E>,
+    E: From<tokio::timer::Error>,
+{
+    delay: Delay,
+    interval: Duration,
+    inner: S,
+}
+
+impl<S, E> TimedStream<S, E>
+where
+    S: Stream<Error = E>,
+    E: From<tokio::timer::Error>,
+{
+    pub fn new(stream: S, at: Instant, interval: Duration) -> Self {
+        TimedStream {
+            delay: Delay::new(at),
+            interval,
+            inner: stream,
+        }
+    }
+
+    pub fn new_interval(stream: S, interval: Duration) -> Self {
+        Self::new(stream, Instant::now() + interval, interval)
+    }
+}
+
+impl<S, E> Stream for TimedStream<S, E>
+where
+    S: Stream<Error = E>,
+    E: From<tokio::timer::Error>,
+{
+    type Item = S::Item;
+    type Error = S::Error;
+
+    fn poll(&mut self) -> Poll<Option<Self::Item>, Self::Error> {
+        use futures::Async;
+
+        let _ = try_ready!(self.delay.poll().map_err(Into::into));
+
+        return match self.inner.poll() {
+            Ok(Async::Ready(t)) => {
+                self.delay.reset(Instant::now() + self.interval);
+                Ok(Async::Ready(t))
+            }
+            other => other,
+        };
+    }
+}
+
 pub struct RustTrending {
     config: Config,
     storage: Storage,
@@ -114,9 +167,8 @@ impl RustTrending {
 
     pub fn run_loop(self) -> impl Future<Item = (), Error = Error> {
         use futures::future::ok;
-        use futures::stream::{iter_ok, Stream};
+        use futures::stream::iter_ok;
         use std::sync::Arc;
-        use std::time::{Duration, Instant};
         use tokio::timer::Interval;
 
         let fetch_interval = Duration::from_secs(self.config.fetch_interval as u64);
@@ -143,10 +195,8 @@ impl RustTrending {
             }).flatten()
             .map_err(|e| e.context("Fetch stream error").into());
 
-        Interval::new(Instant::now(), tweet_interval)
-            .map_err(Into::into)
-            .zip(fetch_stream)
-            .for_each(move |(_, r)| {
+        TimedStream::new(fetch_stream, Instant::now(), tweet_interval)
+            .for_each(move |r| {
                 let storage = storage1.clone();
                 let token = token.clone();
                 let r1 = r.clone();
@@ -157,9 +207,7 @@ impl RustTrending {
                     .map(move |ts| {
                         println!("{}, tweeted {} - {}", ts, r2.author, r2.name);
                     })
-            })
-            .map_err(Into::<Error>::into)
-            .map_err(|e| e.context("Tweet stream error").into())
+            }).map_err(|e| e.context("Tweet stream error").into())
             .or_else(|e| {
                 err_log(&e);
                 ok(())
