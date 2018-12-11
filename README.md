@@ -10,6 +10,10 @@ A twitter bot ([@RustTrending](https://twitter.com/RustTrending)) to tweet [tren
 
 ## Usage
 
+### Requirements
+
+- Redis
+
 ### Local
 
 ```bash
@@ -21,6 +25,7 @@ rust-trending config.toml
 ### Docker
 
 ```bash
+docker run -p 6379:6379 --rm -d redis
 docker run --rm -v $PWD/config.toml:/app/config.toml -d pbzweihander/rust-trending:latest
 ```
 
