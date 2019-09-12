@@ -2,14 +2,13 @@
 
 [![Docker Hub Automated Build Badge]][Docker Hub]
 [![MIT License Badge]][License]
-[![Twitter @RustTrending Badge]][Twitter @RustTrending]
+[![@RustTrending Badge]][@RustTrending]
 
 <img src="logo.svg" alt="Thinking With Rust" width="300px">
 
-A twitter bot ([@RustTrending][Twitter @RustTrending]) to tweet
-[trending rust repositories](https://github.com/trending/rust), inspired by
-[@TrendingGithub](https://twitter.com/TrendingGithub) and
-[@pythontrending](https://twitter.com/pythontrending).
+A twitter bot ([@RustTrending]) to tweet
+[trending rust repositories](https://github.com/trending/rust),
+inspired by [@TrendingGithub] and [@pythontrending].
 
 ## Usage
 
@@ -21,7 +20,7 @@ A twitter bot ([@RustTrending][Twitter @RustTrending]) to tweet
 
 ```bash
 cargo build --release
-cargo install
+cargo install --path .
 rust-trending config.toml
 ```
 
@@ -47,5 +46,7 @@ This project is licensed under the terms of [MIT license][License].
 [Docker Hub]: https://hub.docker.com/r/pbzweihander/rust-trending/
 [MIT License Badge]: https://badgen.net/badge/license/MIT/green
 [License]: LICENSE
-[Twitter @RustTrending Badge]: https://badgen.net/twitter/follow/RustTrending
-[Twitter @RustTrending]: https://twitter.com/RustTrending
+[@RustTrending Badge]: https://badgen.net/twitter/follow/RustTrending
+[@RustTrending]: https://twitter.com/RustTrending
+[@TrendingGithub]: https://twitter.com/TrendingGithub
+[@pythontrending]: https://twitter.com/pythontrending

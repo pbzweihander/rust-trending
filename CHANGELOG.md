@@ -5,6 +5,14 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## 0.3.0 - 2019-09-12
+
+- Now with 2018 edition!
+- Refactored code
+- Remove asynchronous codes for to reduce code complexity
+- Revised `config.toml` structure
+- Updated dependencies
+
 ## 0.2.1 - 2018-10-14
 
 - Timed tweeting with TimedStream struct instead of Interval

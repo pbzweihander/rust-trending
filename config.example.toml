@@ -1,9 +1,12 @@
-redis_url = "redis://redis:6379"
+[interval]
 tweet_ttl = 604800
 fetch_interval = 60
 tweet_interval = 60
 
-[twitter_token]
+[redis]
+url = "redis://localhost:6379/0"
+
+[twitter]
 consumer_key = ""
 consumer_secret = ""
 access_key = ""
