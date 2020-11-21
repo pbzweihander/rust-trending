@@ -4,6 +4,7 @@ use {
     redis::AsyncCommands,
     serde::Deserialize,
     std::{
+        convert::TryInto,
         fs::File,
         io::Read,
         time::{SystemTime, UNIX_EPOCH},
@@ -48,12 +49,12 @@ struct Config {
 }
 
 #[derive(Deserialize, Debug)]
+#[cfg_attr(test, derive(Clone, PartialEq, Eq))]
 struct Repo {
     author: String,
     description: String,
     name: String,
     stars: usize,
-    url: String,
 }
 
 #[inline]
@@ -71,11 +72,66 @@ fn read_config(path: &str) -> Fallible<Config> {
     Ok(toml::from_str(&content)?)
 }
 
+fn parse_trending(html: String) -> Fallible<Vec<Repo>> {
+    // Reference: https://github.com/huchenme/github-trending-api/blob/cf898c27850be407fb3f8dd31a4d1c3256ec6e12/src/functions/utils/fetch.js#L30-L103
+
+    let html = scraper::Html::parse_document(&html);
+    let repos = html
+        .select(&".Box article.Box-row".try_into().unwrap())
+        .filter_map(|repo| {
+            let title = repo
+                .select(&".h3".try_into().unwrap())
+                .next()?
+                .text()
+                .fold(String::new(), |acc, s| acc + s);
+            let mut title_split = title.split("/");
+
+            let author = title_split.next()?.trim().to_string();
+            let name = title_split.next()?.trim().to_string();
+
+            let description = repo
+                .select(&"p.my-1".try_into().unwrap())
+                .next()
+                .map(|e| {
+                    e.text()
+                        .fold(String::new(), |acc, s| acc + s)
+                        .trim()
+                        .to_string()
+                })
+                .unwrap_or_default();
+
+            let stars_text = repo
+                .select(&".mr-3 svg[aria-label='star']".try_into().unwrap())
+                .next()
+                .and_then(|e| e.parent())
+                .and_then(|n| scraper::ElementRef::wrap(n))
+                .map(|e| {
+                    e.text()
+                        .fold(String::new(), |acc, s| acc + s)
+                        .trim()
+                        .replace(",", "")
+                })
+                .unwrap_or_default();
+            let stars = stars_text.parse().unwrap_or(0);
+
+            Some(Repo {
+                author,
+                description,
+                name,
+                stars,
+            })
+        })
+        .collect();
+
+    Ok(repos)
+}
+
 async fn fetch_repos() -> Fallible<Vec<Repo>> {
-    let resp =
-        reqwest::get("https://github-trending-api.now.sh/repositories?language=rust&since=daily")
-            .await?;
-    Ok(resp.json().await?)
+    let resp = reqwest::get("https://github.com/trending/rust?since=daily")
+        .await?
+        .text()
+        .await?;
+    parse_trending(resp)
 }
 
 fn make_tweet(repo: &Repo) -> String {
@@ -85,7 +141,7 @@ fn make_tweet(repo: &Repo) -> String {
         format!("{}: ", repo.name)
     };
     let stars = format!(" ★{}", repo.stars);
-    let url = format!(" {}", repo.url);
+    let url = format!(" https://github.com/{}/{}", repo.author, repo.name);
 
     let length_left = TWEET_LENGTH - (name.len() + stars.len() + url.len());
 
@@ -183,5 +239,57 @@ async fn main() -> Fallible<()> {
             config.interval.fetch_interval,
         ))
         .await;
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::{parse_trending, Repo};
+
+    const TEST_HTML: &str = include_str!("test.html");
+
+    #[test]
+    fn test_parse_trending() {
+        macro_rules! repo {
+            ( $author:expr, $name:expr, $description:expr, $stars:expr ) => {
+                Repo {
+                    author: $author.to_string(),
+                    name: $name.to_string(),
+                    description: $description.to_string(),
+                    stars: $stars,
+                }
+            };
+        }
+        let repos = parse_trending(TEST_HTML.to_string()).unwrap();
+        assert_eq!(
+            repos[..5].to_vec(),
+            vec![
+                repo!("servo", "servo", "The Servo Browser Engine", 18622),
+                repo!(
+                    "timberio",
+                    "vector",
+                    "A high-performance, end-to-end observability data platform.",
+                    5672
+                ),
+                repo!(
+                    "rust-lang",
+                    "rust",
+                    "Empowering everyone to build reliable and efficient software.",
+                    49626
+                ),
+                repo!(
+                    "wasmerio",
+                    "wasmer",
+                    "🚀 The leading WebAssembly Runtime supporting WASI and Emscripten",
+                    6806
+                ),
+                repo!(
+                    "firecracker-microvm",
+                    "firecracker",
+                    "Secure and fast microVMs for serverless computing.",
+                    13092
+                ),
+            ]
+        );
     }
 }
