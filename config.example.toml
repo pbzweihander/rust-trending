@@ -7,6 +7,7 @@ tweet_interval = 60
 url = "redis://localhost:6379/0"
 
 [twitter]
+disabled = true
 consumer_key = ""
 consumer_secret = ""
 access_key = ""

@@ -25,7 +25,8 @@ struct RedisConfig {
 }
 
 #[derive(Deserialize, Debug, Clone)]
-struct TwitterTokenConfig {
+struct TwitterConfig {
+    disabled: bool,
     consumer_key: String,
     consumer_secret: String,
     access_key: String,
@@ -42,7 +43,7 @@ struct BlacklistConfig {
 struct Config {
     interval: IntervalConfig,
     redis: RedisConfig,
-    twitter: TwitterTokenConfig,
+    twitter: TwitterConfig,
     blacklist: BlacklistConfig,
 }
 
@@ -103,7 +104,7 @@ async fn is_repo_tweeted(conn: &mut redis::aio::Connection, repo: &Repo) -> Fall
         .await?)
 }
 
-async fn tweet(config: TwitterTokenConfig, content: String) -> Fallible<()> {
+async fn tweet(config: TwitterConfig, content: String) -> Fallible<()> {
     let consumer = egg_mode::KeyPair::new(config.consumer_key, config.consumer_secret);
     let access = egg_mode::KeyPair::new(config.access_key, config.access_secret);
     let token = egg_mode::Token::Access { consumer, access };
@@ -135,10 +136,12 @@ async fn main_loop(config: &Config, redis_conn: &mut redis::aio::Connection) -> 
             continue;
         }
 
-        let content = make_tweet(&repo);
-        tweet(config.twitter.clone(), content)
-            .await
-            .context("While tweeting")?;
+        if !config.twitter.disabled {
+            let content = make_tweet(&repo);
+            tweet(config.twitter.clone(), content)
+                .await
+                .context("While tweeting")?;
+        }
         mark_tweeted_repo(redis_conn, &repo, config.interval.tweet_ttl)
             .await
             .context("While marking repo tweeted")?;
