@@ -5,16 +5,12 @@ authors = ["pbzweihander <pbzweihander@gmail.com>"]
 edition = "2018"
 
 [dependencies]
-env_logger = "0.6.2"
-failure = "0.1.5"
-log = "0.4.8"
-oauth-client = "0.4.0"
-openssl-probe = "0.1.2"
-redis = "0.12.0"
-reqwest = "0.9.20"
-serde = "1.0.100"
-toml = "0.5.3"
-twitter-api = "0.4.0"
-
-[patch.crates-io]
-openssl = { git = "https://github.com/ishitatsuyuki/rust-openssl", branch = "0.9.x" }
+anyhow = "1.0.34"
+egg-mode = { version = "0.15.0", features = ["rustls_webpki"], default-features = false }
+env_logger = "0.8.2"
+log = "0.4.11"
+redis = { version = "0.17.0", features = ["tokio-rt-core"] }
+reqwest = { version = "0.10.9", features = ["json", "rustls-tls"], default-features = false }
+serde = { version = "1.0.117", features = ["derive"] }
+tokio = { version = "0.2.23", features = ["rt-threaded", "time", "macros"] }
+toml = "0.5.7"

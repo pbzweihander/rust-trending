@@ -1,12 +1,12 @@
 use {
-    failure::{Fallible, ResultExt},
+    anyhow::{Context, Result as Fallible},
     log::{error, info},
+    redis::AsyncCommands,
     serde::Deserialize,
     std::{
         fs::File,
         io::Read,
-        thread,
-        time::{Duration, SystemTime, UNIX_EPOCH},
+        time::{SystemTime, UNIX_EPOCH},
     },
 };
 
@@ -14,7 +14,7 @@ const TWEET_LENGTH: usize = 280;
 
 #[derive(Deserialize, Debug)]
 struct IntervalConfig {
-    tweet_ttl: u64,
+    tweet_ttl: usize,
     fetch_interval: u64,
     tweet_interval: u64,
 }
@@ -24,7 +24,7 @@ struct RedisConfig {
     url: String,
 }
 
-#[derive(Deserialize, Debug)]
+#[derive(Deserialize, Debug, Clone)]
 struct TwitterTokenConfig {
     consumer_key: String,
     consumer_secret: String,
@@ -70,10 +70,11 @@ fn read_config(path: &str) -> Fallible<Config> {
     Ok(toml::from_str(&content)?)
 }
 
-fn fetch_repos() -> Fallible<Vec<Repo>> {
-    let mut resp =
-        reqwest::get("https://github-trending-api.now.sh/repositories?language=rust&since=daily")?;
-    Ok(resp.json()?)
+async fn fetch_repos() -> Fallible<Vec<Repo>> {
+    let resp =
+        reqwest::get("https://github-trending-api.now.sh/repositories?language=rust&since=daily")
+            .await?;
+    Ok(resp.json().await?)
 }
 
 fn make_tweet(repo: &Repo) -> String {
@@ -96,56 +97,65 @@ fn make_tweet(repo: &Repo) -> String {
     format!("{}{}{}{}", name, description, stars, url)
 }
 
-fn is_repo_tweeted(conn: &mut redis::Connection, repo: &Repo) -> Fallible<bool> {
-    let exists = redis::cmd("EXISTS")
-        .arg(format!("{}/{}", repo.author, repo.name))
-        .query(conn)?;
-
-    Ok(exists)
+async fn is_repo_tweeted(conn: &mut redis::aio::Connection, repo: &Repo) -> Fallible<bool> {
+    Ok(conn
+        .exists(format!("{}/{}", repo.author, repo.name))
+        .await?)
 }
 
-fn tweet(config: &TwitterTokenConfig, content: &str) -> Fallible<()> {
-    let consumer = oauth_client::Token::new(&config.consumer_key, &config.consumer_secret);
-    let access = oauth_client::Token::new(&config.access_key, &config.access_secret);
-    twitter_api::update_status(&consumer, &access, content)
-}
-
-fn mark_tweeted_repo(conn: &mut redis::Connection, repo: &Repo, ttl: u64) -> Fallible<()> {
-    redis::cmd("SETEX")
-        .arg(format!("{}/{}", repo.author, repo.name))
-        .arg(ttl)
-        .arg(now_ts())
-        .query(conn)?;
-
+async fn tweet(config: TwitterTokenConfig, content: String) -> Fallible<()> {
+    let consumer = egg_mode::KeyPair::new(config.consumer_key, config.consumer_secret);
+    let access = egg_mode::KeyPair::new(config.access_key, config.access_secret);
+    let token = egg_mode::Token::Access { consumer, access };
+    let tweet = egg_mode::tweet::DraftTweet::new(content);
+    tweet.send(&token).await?;
     Ok(())
 }
 
-fn main_loop(config: &Config, redis_conn: &mut redis::Connection) -> Fallible<()> {
-    let repos = fetch_repos().context("While fetching repo")?;
+async fn mark_tweeted_repo(
+    conn: &mut redis::aio::Connection,
+    repo: &Repo,
+    ttl: usize,
+) -> Fallible<()> {
+    conn.set_ex(format!("{}/{}", repo.author, repo.name), now_ts(), ttl)
+        .await?;
+    Ok(())
+}
+
+async fn main_loop(config: &Config, redis_conn: &mut redis::aio::Connection) -> Fallible<()> {
+    let repos = fetch_repos().await.context("While fetching repo")?;
 
     for repo in repos {
         if config.blacklist.authors.contains(&repo.author)
             || config.blacklist.names.contains(&repo.name)
-            || is_repo_tweeted(redis_conn, &repo).context("While checking repo tweeted")?
+            || is_repo_tweeted(redis_conn, &repo)
+                .await
+                .context("While checking repo tweeted")?
         {
             continue;
         }
 
         let content = make_tweet(&repo);
-        tweet(&config.twitter, &content).context("While tweeting")?;
+        tweet(config.twitter.clone(), content)
+            .await
+            .context("While tweeting")?;
         mark_tweeted_repo(redis_conn, &repo, config.interval.tweet_ttl)
+            .await
             .context("While marking repo tweeted")?;
 
         info!("tweeted {} - {}", repo.author, repo.name);
 
-        thread::sleep(Duration::from_secs(config.interval.tweet_interval));
+        tokio::time::delay_for(tokio::time::Duration::from_secs(
+            config.interval.tweet_interval,
+        ))
+        .await;
     }
 
     Ok(())
 }
 
-fn main() -> Fallible<()> {
-    openssl_probe::init_ssl_cert_env_vars();
+#[tokio::main]
+async fn main() -> Fallible<()> {
     env_logger::try_init().context("While initializing env_logger")?;
 
     let mut args = std::env::args();
@@ -156,15 +166,19 @@ fn main() -> Fallible<()> {
     let redis_client =
         redis::Client::open(config.redis.url.as_str()).context("While creating redis client")?;
     let mut redis_conn = redis_client
-        .get_connection()
+        .get_async_connection()
+        .await
         .context("While connecting redis")?;
 
     loop {
-        let res = main_loop(&config, &mut redis_conn);
+        let res = main_loop(&config, &mut redis_conn).await;
         if let Err(e) = res {
-            error!("{}", e);
+            error!("{:#}", e);
         }
 
-        thread::sleep(Duration::from_secs(config.interval.fetch_interval));
+        tokio::time::delay_for(tokio::time::Duration::from_secs(
+            config.interval.fetch_interval,
+        ))
+        .await;
     }
 }
