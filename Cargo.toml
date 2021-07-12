@@ -1,8 +1,11 @@
 [package]
 name = "rust-trending"
-version = "0.3.0"
-authors = ["pbzweihander <pbzweihander@gmail.com>"]
+version = "0.4.0"
+authors = ["Kangwook Lee <pbzweihander@gmail.com>"]
 edition = "2018"
+repository = "https://github.com/pbzweihander/rust-trending"
+readme = "README.md"
+license = "MIT"
 
 [dependencies]
 anyhow = "1.0.41"
