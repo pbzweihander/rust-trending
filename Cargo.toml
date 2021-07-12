@@ -5,13 +5,13 @@ authors = ["pbzweihander <pbzweihander@gmail.com>"]
 edition = "2018"
 
 [dependencies]
-anyhow = "1.0.34"
-egg-mode = { version = "0.15.0", features = ["rustls_webpki"], default-features = false }
-env_logger = "0.8.2"
-log = "0.4.11"
-redis = { version = "0.17.0", features = ["tokio-rt-core"] }
-reqwest = { version = "0.10.9", features = ["rustls-tls"], default-features = false }
+anyhow = "1.0.41"
+egg-mode = { version = "0.16.0", features = ["rustls_webpki"], default-features = false }
+env_logger = "0.8.4"
+log = "0.4.14"
+redis = { version = "0.20.2", features = ["aio", "tokio-comp"] }
+reqwest = { version = "0.11.4", features = ["rustls-tls"], default-features = false }
 scraper = "0.12.0"
-serde = { version = "1.0.117", features = ["derive"] }
-tokio = { version = "0.2.23", features = ["rt-threaded", "time", "macros"] }
-toml = "0.5.7"
+serde = { version = "1.0.126", features = ["derive"] }
+tokio = { version = "1.8.1", features = ["rt-multi-thread", "time", "macros"] }
+toml = "0.5.8"

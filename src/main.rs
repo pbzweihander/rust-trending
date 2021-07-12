@@ -204,7 +204,7 @@ async fn main_loop(config: &Config, redis_conn: &mut redis::aio::Connection) -> 
 
         info!("tweeted {} - {}", repo.author, repo.name);
 
-        tokio::time::delay_for(tokio::time::Duration::from_secs(
+        tokio::time::sleep(tokio::time::Duration::from_secs(
             config.interval.tweet_interval,
         ))
         .await;
@@ -235,7 +235,7 @@ async fn main() -> Fallible<()> {
             error!("{:#}", e);
         }
 
-        tokio::time::delay_for(tokio::time::Duration::from_secs(
+        tokio::time::sleep(tokio::time::Duration::from_secs(
             config.interval.fetch_interval,
         ))
         .await;
