@@ -1,4 +1,4 @@
-FROM clux/muslrust:1.48.0-stable
+FROM clux/muslrust:1.53.0-stable
 
 WORKDIR /volume
 
