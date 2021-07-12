@@ -84,7 +84,7 @@ fn parse_trending(html: String) -> Fallible<Vec<Repo>> {
                 .next()?
                 .text()
                 .fold(String::new(), |acc, s| acc + s);
-            let mut title_split = title.split("/");
+            let mut title_split = title.split('/');
 
             let author = title_split.next()?.trim().to_string();
             let name = title_split.next()?.trim().to_string();
@@ -104,7 +104,7 @@ fn parse_trending(html: String) -> Fallible<Vec<Repo>> {
                 .select(&".mr-3 svg[aria-label='star']".try_into().unwrap())
                 .next()
                 .and_then(|e| e.parent())
-                .and_then(|n| scraper::ElementRef::wrap(n))
+                .and_then(scraper::ElementRef::wrap)
                 .map(|e| {
                     e.text()
                         .fold(String::new(), |acc, s| acc + s)
@@ -246,7 +246,7 @@ async fn main() -> Fallible<()> {
 mod tests {
     use super::{parse_trending, Repo};
 
-    const TEST_HTML: &str = include_str!("test.html");
+    const TEST_HTML: &str = include_str!("../testdata/test.html");
 
     #[test]
     fn test_parse_trending() {
