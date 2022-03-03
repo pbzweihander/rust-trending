@@ -11,4 +11,4 @@ services:
     environment:
       - RUST_LOG=info
     volumes:
-      - /srv/rust-trending/config.toml:/app/config.toml
+      - /srv/rust-trending/config.toml:/config.toml
