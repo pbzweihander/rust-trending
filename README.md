@@ -1,6 +1,5 @@
 # rust-trending
 
-[![Docker Hub Automated Build Badge]][Docker Hub]
 [![MIT License Badge]][License]
 [![@RustTrending Badge]][@RustTrending]
 
@@ -28,7 +27,7 @@ rust-trending config.toml
 
 ```bash
 docker run -p 6379:6379 --rm -d redis
-docker run --rm -v $PWD/config.toml:/app/config.toml -d pbzweihander/rust-trending:latest
+docker run --rm -v $PWD/config.toml:/app/config.toml -d ghcr.io/pbzweihander/rust-trending:latest
 ```
 
 ### Docker Compose
@@ -42,8 +41,6 @@ docker-compose up -d
 
 This project is licensed under the terms of [MIT license][License].
 
-[Docker Hub Automated Build Badge]: https://img.shields.io/docker/build/pbzweihander/rust-trending.svg
-[Docker Hub]: https://hub.docker.com/r/pbzweihander/rust-trending/
 [MIT License Badge]: https://badgen.net/badge/license/MIT/green
 [License]: LICENSE
 [@RustTrending Badge]: https://badgen.net/twitter/follow/RustTrending
