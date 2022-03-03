@@ -1,0 +1,11 @@
+on: [push, pull_request]
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v2
+      - run: cargo build
+      - run: cargo test
+      - run: cargo clippy --no-deps -- -D warnings
+      - run: cargo fmt -- --check
