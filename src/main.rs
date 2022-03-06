@@ -109,7 +109,7 @@ fn parse_trending(html: String) -> Fallible<Vec<Repo>> {
                     e.text()
                         .fold(String::new(), |acc, s| acc + s)
                         .trim()
-                        .replace(",", "")
+                        .replace(',', "")
                 })
                 .unwrap_or_default();
             let stars = stars_text.parse().unwrap_or(0);
