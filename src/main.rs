@@ -12,6 +12,7 @@ use {
 };
 
 const TWEET_LENGTH: usize = 280;
+const SMALL_COMMERCIAL_AT: &str = "﹫";
 
 #[derive(Deserialize, Debug)]
 struct IntervalConfig {
@@ -145,10 +146,11 @@ fn make_tweet(repo: &Repo) -> String {
 
     let length_left = TWEET_LENGTH - (name.len() + stars.len() + url.len());
 
+    let description = repo.description.replace('@', SMALL_COMMERCIAL_AT);
     let description = if repo.description.len() < length_left {
-        repo.description.to_string()
+        description
     } else {
-        format!("{} ...", repo.description.split_at(length_left - 4).0)
+        format!("{} ...", description.split_at(length_left - 4).0)
     };
 
     format!("{}{}{}{}", name, description, stars, url)
@@ -244,22 +246,23 @@ async fn main() -> Fallible<()> {
 
 #[cfg(test)]
 mod tests {
-    use super::{parse_trending, Repo};
+    use super::{make_tweet, parse_trending, Repo};
 
     const TEST_HTML: &str = include_str!("../testdata/test.html");
 
+    macro_rules! repo {
+        ( $author:expr, $name:expr, $description:expr, $stars:expr ) => {
+            Repo {
+                author: $author.to_string(),
+                name: $name.to_string(),
+                description: $description.to_string(),
+                stars: $stars,
+            }
+        };
+    }
+
     #[test]
     fn test_parse_trending() {
-        macro_rules! repo {
-            ( $author:expr, $name:expr, $description:expr, $stars:expr ) => {
-                Repo {
-                    author: $author.to_string(),
-                    name: $name.to_string(),
-                    description: $description.to_string(),
-                    stars: $stars,
-                }
-            };
-        }
         let repos = parse_trending(TEST_HTML.to_string()).unwrap();
         assert_eq!(
             repos[..5].to_vec(),
@@ -291,5 +294,19 @@ mod tests {
                 ),
             ]
         );
+    }
+
+    #[test]
+    fn test_make_tweet() {
+        assert_eq!(
+            make_tweet(&repo!(
+                "wez",
+                "wezterm",
+                "A GPU-accelerated cross-platform terminal emulator and multiplexer written by @wez and implemented in Rust",
+                5924
+            )),
+            "wez / wezterm: A GPU-accelerated cross-platform terminal emulator and multiplexer written by ﹫wez and implemented in Rust ★5924 https://github.com/wez/wezterm"
+        );
+        // TODO: Add testcase for `...`
     }
 }
