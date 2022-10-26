@@ -307,6 +307,23 @@ mod tests {
             )),
             "wez / wezterm: A GPU-accelerated cross-platform terminal emulator and multiplexer written by ﹫wez and implemented in Rust ★5924 https://github.com/wez/wezterm"
         );
-        // TODO: Add testcase for `...`
+        assert_eq!(
+            make_tweet(&repo!(
+                "AlfioEmanueleFresta",
+                "xdg-credentials-portal",
+                "FIDO2 (WebAuthn) and FIDO U2F platform library for Linux written in Rust; includes a proposal for a new D-Bus Portal interface for FIDO2, accessible from Flatpak apps and Snaps key",
+                192
+            )),
+            "AlfioEmanueleFresta / xdg-credentials-portal: FIDO2 (WebAuthn) and FIDO U2F platform library for Linux written in Rust; includes a proposal for a new D-Bus Portal interface for FIDO2, accessible from Flatpak ... ★192 https://github.com/AlfioEmanueleFresta/xdg-credentials-portal"
+        );
+        assert_eq!(
+            make_tweet(&repo!(
+                "meilisearch",
+                "meilisearch",
+                "A lightning-fast search engine that fits effortlessly into your apps, websites, and workflow.",
+                30388
+            )),
+            "meilisearch: A lightning-fast search engine that fits effortlessly into your apps, websites, and workflow. ★30388 https://github.com/meilisearch/meilisearch"
+        );
     }
 }
