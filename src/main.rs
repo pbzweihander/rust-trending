@@ -7,10 +7,14 @@ use std::{
 
 use anyhow::{Context, Result};
 use log::{error, info};
+use once_cell::sync::Lazy;
 use redis::AsyncCommands;
-use serde::Deserialize;
+use serde::{Deserialize, Serialize};
+use url::Url;
 
 const TWEET_LENGTH: usize = 280;
+const TOOT_LENGTH: usize = 500;
+const MASTODON_FIXED_URL_LENGTH: usize = 23;
 const SMALL_COMMERCIAL_AT: &str = "﹫";
 
 #[derive(Deserialize, Debug)]
@@ -33,6 +37,12 @@ struct TwitterConfig {
     access_secret: String,
 }
 
+#[derive(Deserialize, Debug, Clone)]
+struct MastodonConfig {
+    instance_url: Url,
+    access_token: String,
+}
+
 #[derive(Deserialize, Debug)]
 struct DenylistConfig {
     names: Vec<String>,
@@ -45,6 +55,8 @@ struct Config {
     redis: RedisConfig,
     #[serde(default)]
     twitter: Option<TwitterConfig>,
+    #[serde(default)]
+    mastodon: Option<MastodonConfig>,
     denylist: DenylistConfig,
 }
 
@@ -134,25 +146,53 @@ async fn fetch_repos() -> Result<Vec<Repo>> {
     parse_trending(resp)
 }
 
-fn make_tweet(repo: &Repo) -> String {
-    let name = if repo.author != repo.name {
+fn make_post_prefix(repo: &Repo) -> String {
+    if repo.author != repo.name {
         format!("{} / {}: ", repo.author, repo.name)
     } else {
         format!("{}: ", repo.name)
-    };
-    let stars = format!(" ★{}", repo.stars);
-    let url = format!(" https://github.com/{}/{}", repo.author, repo.name);
+    }
+}
 
-    let length_left = TWEET_LENGTH - (name.len() + stars.len() + url.len());
+fn make_post_stars(repo: &Repo) -> String {
+    format!(" ★{}", repo.stars)
+}
 
+fn make_post_url(repo: &Repo) -> String {
+    format!(" https://github.com/{}/{}", repo.author, repo.name)
+}
+
+fn make_post_description(repo: &Repo, length_left: usize) -> String {
     let description = repo.description.replace('@', SMALL_COMMERCIAL_AT);
-    let description = if repo.description.len() < length_left {
+    if repo.description.len() < length_left {
         description
     } else {
         format!("{} ...", description.split_at(length_left - 4).0)
-    };
+    }
+}
 
-    format!("{}{}{}{}", name, description, stars, url)
+fn make_tweet(repo: &Repo) -> String {
+    let prefix = make_post_prefix(repo);
+    let stars = make_post_stars(repo);
+    let url = make_post_url(repo);
+
+    let length_left = TWEET_LENGTH - (prefix.len() + stars.len() + url.len());
+
+    let description = make_post_description(repo, length_left);
+
+    format!("{}{}{}{}", prefix, description, stars, url)
+}
+
+fn make_toot(repo: &Repo) -> String {
+    let prefix = make_post_prefix(repo);
+    let stars = make_post_stars(repo);
+    let url = make_post_url(repo);
+
+    let length_left = TOOT_LENGTH - (prefix.len() + stars.len() + MASTODON_FIXED_URL_LENGTH);
+
+    let description = make_post_description(repo, length_left);
+
+    format!("{}{}{}{}", prefix, description, stars, url)
 }
 
 async fn is_repo_posted(conn: &mut redis::aio::Connection, repo: &Repo) -> Result<bool> {
@@ -167,6 +207,28 @@ async fn tweet(config: TwitterConfig, content: String) -> Result<()> {
     let token = egg_mode::Token::Access { consumer, access };
     let tweet = egg_mode::tweet::DraftTweet::new(content);
     tweet.send(&token).await?;
+    Ok(())
+}
+
+#[derive(Serialize, Debug)]
+struct PostStatusesBody<'a> {
+    status: &'a str,
+    visibility: &'a str,
+}
+
+async fn toot(config: &MastodonConfig, content: &str) -> Result<()> {
+    const CLIENT: Lazy<reqwest::Client> = Lazy::new(reqwest::Client::new);
+    let url = config.instance_url.join("./api/v1/statuses")?;
+    CLIENT
+        .post(url)
+        .bearer_auth(&config.access_token)
+        .form(&PostStatusesBody {
+            status: content,
+            visibility: "unlisted",
+        })
+        .send()
+        .await?
+        .error_for_status()?;
     Ok(())
 }
 
@@ -199,6 +261,12 @@ async fn main_loop(config: &Config, redis_conn: &mut redis::aio::Connection) -> 
                 .await
                 .context("While tweeting")?;
         }
+
+        if let Some(config) = &config.mastodon {
+            let content = make_toot(&repo);
+            toot(&config, &content).await.context("While tooting")?;
+        }
+
         mark_posted_repo(redis_conn, &repo, config.interval.post_ttl)
             .await
             .context("While marking repo posted")?;

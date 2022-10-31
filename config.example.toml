@@ -12,6 +12,10 @@ consumer_secret = ""
 access_key = ""
 access_secret = ""
 
+[mastodon]
+instance_url = ""
+access_token = ""
+
 [denylist]
 names = []
 authors = []
