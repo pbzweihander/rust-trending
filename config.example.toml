@@ -1,7 +1,7 @@
 [interval]
-tweet_ttl = 604800
+post_ttl = 604800
 fetch_interval = 60
-tweet_interval = 60
+post_interval = 60
 
 [redis]
 url = "redis://localhost:6379/0"

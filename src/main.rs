@@ -15,9 +15,9 @@ const SMALL_COMMERCIAL_AT: &str = "﹫";
 
 #[derive(Deserialize, Debug)]
 struct IntervalConfig {
-    tweet_ttl: usize,
+    post_ttl: usize,
     fetch_interval: u64,
-    tweet_interval: u64,
+    post_interval: u64,
 }
 
 #[derive(Deserialize, Debug)]
@@ -155,7 +155,7 @@ fn make_tweet(repo: &Repo) -> String {
     format!("{}{}{}{}", name, description, stars, url)
 }
 
-async fn is_repo_tweeted(conn: &mut redis::aio::Connection, repo: &Repo) -> Result<bool> {
+async fn is_repo_posted(conn: &mut redis::aio::Connection, repo: &Repo) -> Result<bool> {
     Ok(conn
         .exists(format!("{}/{}", repo.author, repo.name))
         .await?)
@@ -170,7 +170,7 @@ async fn tweet(config: TwitterConfig, content: String) -> Result<()> {
     Ok(())
 }
 
-async fn mark_tweeted_repo(
+async fn mark_posted_repo(
     conn: &mut redis::aio::Connection,
     repo: &Repo,
     ttl: usize,
@@ -186,9 +186,9 @@ async fn main_loop(config: &Config, redis_conn: &mut redis::aio::Connection) -> 
     for repo in repos {
         if config.blacklist.authors.contains(&repo.author)
             || config.blacklist.names.contains(&repo.name)
-            || is_repo_tweeted(redis_conn, &repo)
+            || is_repo_posted(redis_conn, &repo)
                 .await
-                .context("While checking repo tweeted")?
+                .context("While checking repo posted")?
         {
             continue;
         }
@@ -199,14 +199,14 @@ async fn main_loop(config: &Config, redis_conn: &mut redis::aio::Connection) -> 
                 .await
                 .context("While tweeting")?;
         }
-        mark_tweeted_repo(redis_conn, &repo, config.interval.tweet_ttl)
+        mark_posted_repo(redis_conn, &repo, config.interval.post_ttl)
             .await
-            .context("While marking repo tweeted")?;
+            .context("While marking repo posted")?;
 
-        info!("tweeted {} - {}", repo.author, repo.name);
+        info!("posted {} - {}", repo.author, repo.name);
 
         tokio::time::sleep(tokio::time::Duration::from_secs(
-            config.interval.tweet_interval,
+            config.interval.post_interval,
         ))
         .await;
     }
