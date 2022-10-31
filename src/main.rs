@@ -27,7 +27,6 @@ struct RedisConfig {
 
 #[derive(Deserialize, Debug, Clone)]
 struct TwitterConfig {
-    disabled: bool,
     consumer_key: String,
     consumer_secret: String,
     access_key: String,
@@ -44,7 +43,8 @@ struct DenylistConfig {
 struct Config {
     interval: IntervalConfig,
     redis: RedisConfig,
-    twitter: TwitterConfig,
+    #[serde(default)]
+    twitter: Option<TwitterConfig>,
     denylist: DenylistConfig,
 }
 
@@ -193,9 +193,9 @@ async fn main_loop(config: &Config, redis_conn: &mut redis::aio::Connection) -> 
             continue;
         }
 
-        if !config.twitter.disabled {
+        if let Some(config) = &config.twitter {
             let content = make_tweet(&repo);
-            tweet(config.twitter.clone(), content)
+            tweet(config.clone(), content)
                 .await
                 .context("While tweeting")?;
         }
