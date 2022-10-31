@@ -3,11 +3,11 @@
 [![MIT License Badge]][License]
 [![@RustTrending Badge]][@RustTrending]
 
-<img src="logo.svg" alt="Thinking With Rust" width="300px">
+<img src="logo.svg" alt="RustTrending" width="300px">
 
-A twitter bot ([@RustTrending]) to tweet
-[trending rust repositories](https://github.com/trending/rust),
-inspired by [@TrendingGithub] and [@pythontrending].
+A Twitter and Mastodon bot to post [trending rust repositories](https://github.com/trending/rust), inspired by [@TrendingGithub] and [@pythontrending].
+
+Check out in [Twitter](https://twitter.com/RustTrending) and [Mastodon](https://mastodon.pbzweihander.dev/@RustTrending)!
 
 ## Usage
 
@@ -18,16 +18,14 @@ inspired by [@TrendingGithub] and [@pythontrending].
 ### Local
 
 ```bash
-cargo build --release
-cargo install --path .
-rust-trending config.toml
+RUST_LOG=info cargo run -- config.toml
 ```
 
 ### Docker
 
 ```bash
 docker run -p 6379:6379 --rm -d redis
-docker run --rm -v $PWD/config.toml:/app/config.toml -d ghcr.io/pbzweihander/rust-trending:latest
+docker run --rm -v $PWD/config.toml:/config.toml -d ghcr.io/pbzweihander/rust-trending:latest
 ```
 
 ### Docker Compose
@@ -44,6 +42,5 @@ This project is licensed under the terms of [MIT license][License].
 [MIT License Badge]: https://badgen.net/badge/license/MIT/green
 [License]: LICENSE
 [@RustTrending Badge]: https://badgen.net/twitter/follow/RustTrending
-[@RustTrending]: https://twitter.com/RustTrending
 [@TrendingGithub]: https://twitter.com/TrendingGithub
 [@pythontrending]: https://twitter.com/pythontrending
