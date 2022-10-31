@@ -13,6 +13,6 @@ consumer_secret = ""
 access_key = ""
 access_secret = ""
 
-[blacklist]
+[denylist]
 names = []
 authors = []

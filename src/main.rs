@@ -35,7 +35,7 @@ struct TwitterConfig {
 }
 
 #[derive(Deserialize, Debug)]
-struct BlacklistConfig {
+struct DenylistConfig {
     names: Vec<String>,
     authors: Vec<String>,
 }
@@ -45,7 +45,7 @@ struct Config {
     interval: IntervalConfig,
     redis: RedisConfig,
     twitter: TwitterConfig,
-    blacklist: BlacklistConfig,
+    denylist: DenylistConfig,
 }
 
 #[derive(Deserialize, Debug)]
@@ -184,8 +184,8 @@ async fn main_loop(config: &Config, redis_conn: &mut redis::aio::Connection) -> 
     let repos = fetch_repos().await.context("While fetching repo")?;
 
     for repo in repos {
-        if config.blacklist.authors.contains(&repo.author)
-            || config.blacklist.names.contains(&repo.name)
+        if config.denylist.authors.contains(&repo.author)
+            || config.denylist.names.contains(&repo.name)
             || is_repo_posted(redis_conn, &repo)
                 .await
                 .context("While checking repo posted")?
