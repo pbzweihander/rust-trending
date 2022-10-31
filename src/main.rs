@@ -1,15 +1,14 @@
-use {
-    anyhow::{Context, Result as Fallible},
-    log::{error, info},
-    redis::AsyncCommands,
-    serde::Deserialize,
-    std::{
-        convert::TryInto,
-        fs::File,
-        io::Read,
-        time::{SystemTime, UNIX_EPOCH},
-    },
+use std::{
+    convert::TryInto,
+    fs::File,
+    io::Read,
+    time::{SystemTime, UNIX_EPOCH},
 };
+
+use anyhow::{Context, Result};
+use log::{error, info};
+use redis::AsyncCommands;
+use serde::Deserialize;
 
 const TWEET_LENGTH: usize = 280;
 const SMALL_COMMERCIAL_AT: &str = "﹫";
@@ -66,14 +65,14 @@ fn now_ts() -> u64 {
         .as_secs()
 }
 
-fn read_config(path: &str) -> Fallible<Config> {
+fn read_config(path: &str) -> Result<Config> {
     let mut file = File::open(path)?;
     let mut content = String::new();
     file.read_to_string(&mut content)?;
     Ok(toml::from_str(&content)?)
 }
 
-fn parse_trending(html: String) -> Fallible<Vec<Repo>> {
+fn parse_trending(html: String) -> Result<Vec<Repo>> {
     // Reference: https://github.com/huchenme/github-trending-api/blob/cf898c27850be407fb3f8dd31a4d1c3256ec6e12/src/functions/utils/fetch.js#L30-L103
 
     let html = scraper::Html::parse_document(&html);
@@ -127,7 +126,7 @@ fn parse_trending(html: String) -> Fallible<Vec<Repo>> {
     Ok(repos)
 }
 
-async fn fetch_repos() -> Fallible<Vec<Repo>> {
+async fn fetch_repos() -> Result<Vec<Repo>> {
     let resp = reqwest::get("https://github.com/trending/rust?since=daily")
         .await?
         .text()
@@ -156,13 +155,13 @@ fn make_tweet(repo: &Repo) -> String {
     format!("{}{}{}{}", name, description, stars, url)
 }
 
-async fn is_repo_tweeted(conn: &mut redis::aio::Connection, repo: &Repo) -> Fallible<bool> {
+async fn is_repo_tweeted(conn: &mut redis::aio::Connection, repo: &Repo) -> Result<bool> {
     Ok(conn
         .exists(format!("{}/{}", repo.author, repo.name))
         .await?)
 }
 
-async fn tweet(config: TwitterConfig, content: String) -> Fallible<()> {
+async fn tweet(config: TwitterConfig, content: String) -> Result<()> {
     let consumer = egg_mode::KeyPair::new(config.consumer_key, config.consumer_secret);
     let access = egg_mode::KeyPair::new(config.access_key, config.access_secret);
     let token = egg_mode::Token::Access { consumer, access };
@@ -175,13 +174,13 @@ async fn mark_tweeted_repo(
     conn: &mut redis::aio::Connection,
     repo: &Repo,
     ttl: usize,
-) -> Fallible<()> {
+) -> Result<()> {
     conn.set_ex(format!("{}/{}", repo.author, repo.name), now_ts(), ttl)
         .await?;
     Ok(())
 }
 
-async fn main_loop(config: &Config, redis_conn: &mut redis::aio::Connection) -> Fallible<()> {
+async fn main_loop(config: &Config, redis_conn: &mut redis::aio::Connection) -> Result<()> {
     let repos = fetch_repos().await.context("While fetching repo")?;
 
     for repo in repos {
@@ -216,7 +215,7 @@ async fn main_loop(config: &Config, redis_conn: &mut redis::aio::Connection) -> 
 }
 
 #[tokio::main]
-async fn main() -> Fallible<()> {
+async fn main() -> Result<()> {
     env_logger::try_init().context("While initializing env_logger")?;
 
     let mut args = std::env::args();
