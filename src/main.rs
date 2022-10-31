@@ -217,7 +217,7 @@ struct PostStatusesBody<'a> {
 }
 
 async fn toot(config: &MastodonConfig, content: &str) -> Result<()> {
-    const CLIENT: Lazy<reqwest::Client> = Lazy::new(reqwest::Client::new);
+    static CLIENT: Lazy<reqwest::Client> = Lazy::new(reqwest::Client::new);
     let url = config.instance_url.join("./api/v1/statuses")?;
     CLIENT
         .post(url)
@@ -264,7 +264,7 @@ async fn main_loop(config: &Config, redis_conn: &mut redis::aio::Connection) -> 
 
         if let Some(config) = &config.mastodon {
             let content = make_toot(&repo);
-            toot(&config, &content).await.context("While tooting")?;
+            toot(config, &content).await.context("While tooting")?;
         }
 
         mark_posted_repo(redis_conn, &repo, config.interval.post_ttl)
