@@ -19,3 +19,4 @@ access_token = ""
 [denylist]
 names = []
 authors = []
+descriptions = []

@@ -47,6 +47,15 @@ struct MastodonConfig {
 struct DenylistConfig {
     names: Vec<String>,
     authors: Vec<String>,
+    descriptions: Vec<String>,
+}
+
+impl DenylistConfig {
+    fn contains(&self, repo: &Repo) -> bool {
+        self.names.contains(&repo.name)
+            || self.authors.contains(&repo.author)
+            || self.descriptions.contains(&repo.description)
+    }
 }
 
 #[derive(Deserialize, Debug)]
@@ -246,8 +255,7 @@ async fn main_loop(config: &Config, redis_conn: &mut redis::aio::Connection) -> 
     let repos = fetch_repos().await.context("While fetching repo")?;
 
     for repo in repos {
-        if config.denylist.authors.contains(&repo.author)
-            || config.denylist.names.contains(&repo.name)
+        if config.denylist.contains(&repo)
             || is_repo_posted(redis_conn, &repo)
                 .await
                 .context("While checking repo posted")?
