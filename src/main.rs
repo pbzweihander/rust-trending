@@ -54,7 +54,11 @@ impl DenylistConfig {
     fn contains(&self, repo: &Repo) -> bool {
         self.names.contains(&repo.name)
             || self.authors.contains(&repo.author)
-            || self.descriptions.contains(&repo.description)
+            || self
+                .descriptions
+                .iter()
+                .map(|description| repo.description.contains(description))
+                .any(|b| b)
     }
 }
 
@@ -321,7 +325,7 @@ async fn main() -> Result<()> {
 
 #[cfg(test)]
 mod tests {
-    use super::{make_tweet, parse_trending, Repo};
+    use super::{make_tweet, parse_trending, DenylistConfig, Repo};
 
     const TEST_HTML: &str = include_str!("../testdata/test.html");
 
@@ -334,6 +338,52 @@ mod tests {
                 stars: $stars,
             }
         };
+    }
+
+    #[test]
+    fn test_denylistconfig_contains() {
+        assert!(!DenylistConfig {
+            authors: vec![],
+            names: vec![],
+            descriptions: vec![]
+        }
+        .contains(&repo!("foo", "bar", "somelongdescription", 0)));
+        assert!(DenylistConfig {
+            authors: vec!["foo".to_string()],
+            names: vec![],
+            descriptions: vec![]
+        }
+        .contains(&repo!("foo", "bar", "somelongdescription", 0)));
+        assert!(!DenylistConfig {
+            authors: vec!["bar".to_string()],
+            names: vec![],
+            descriptions: vec![]
+        }
+        .contains(&repo!("foo", "bar", "somelongdescription", 0)));
+        assert!(DenylistConfig {
+            authors: vec![],
+            names: vec!["bar".to_string()],
+            descriptions: vec![]
+        }
+        .contains(&repo!("foo", "bar", "somelongdescription", 0)));
+        assert!(!DenylistConfig {
+            authors: vec![],
+            names: vec!["foo".to_string()],
+            descriptions: vec![]
+        }
+        .contains(&repo!("foo", "bar", "somelongdescription", 0)));
+        assert!(DenylistConfig {
+            authors: vec![],
+            names: vec![],
+            descriptions: vec!["long".to_string()]
+        }
+        .contains(&repo!("foo", "bar", "somelongdescription", 0)));
+        assert!(!DenylistConfig {
+            authors: vec![],
+            names: vec![],
+            descriptions: vec!["foo".to_string()]
+        }
+        .contains(&repo!("foo", "bar", "somelongdescription", 0)));
     }
 
     #[test]
