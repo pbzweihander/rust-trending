@@ -57,7 +57,11 @@ impl DenylistConfig {
             || self
                 .descriptions
                 .iter()
-                .map(|description| repo.description.contains(description))
+                .map(|description| {
+                    repo.description
+                        .to_lowercase()
+                        .contains(&description.to_lowercase())
+                })
                 .any(|b| b)
     }
 }
@@ -384,6 +388,12 @@ mod tests {
             descriptions: vec!["foo".to_string()]
         }
         .contains(&repo!("foo", "bar", "somelongdescription", 0)));
+        assert!(DenylistConfig {
+            authors: vec![],
+            names: vec![],
+            descriptions: vec!["Long".to_string()]
+        }
+        .contains(&repo!("foo", "bar", "someloNgdescription", 0)));
     }
 
     #[test]
