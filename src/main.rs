@@ -10,6 +10,7 @@ use log::{error, info};
 use once_cell::sync::Lazy;
 use redis::AsyncCommands;
 use serde::{Deserialize, Serialize};
+use twitter_v2::{authorization::BearerToken, TwitterApi};
 use url::Url;
 
 const TWEET_LENGTH: usize = 280;
@@ -31,10 +32,7 @@ struct RedisConfig {
 
 #[derive(Deserialize, Debug, Clone)]
 struct TwitterConfig {
-    consumer_key: String,
-    consumer_secret: String,
-    access_key: String,
-    access_secret: String,
+    bearer_token: String,
 }
 
 #[derive(Deserialize, Debug, Clone)]
@@ -219,11 +217,12 @@ async fn is_repo_posted(conn: &mut redis::aio::Connection, repo: &Repo) -> Resul
 }
 
 async fn tweet(config: TwitterConfig, content: String) -> Result<()> {
-    let consumer = egg_mode::KeyPair::new(config.consumer_key, config.consumer_secret);
-    let access = egg_mode::KeyPair::new(config.access_key, config.access_secret);
-    let token = egg_mode::Token::Access { consumer, access };
-    let tweet = egg_mode::tweet::DraftTweet::new(content);
-    tweet.send(&token).await?;
+    let token = BearerToken::new(config.bearer_token);
+    TwitterApi::new(token)
+        .post_tweet()
+        .text(content)
+        .send()
+        .await?;
     Ok(())
 }
 
