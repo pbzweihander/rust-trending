@@ -10,7 +10,7 @@ use log::{error, info};
 use once_cell::sync::Lazy;
 use redis::AsyncCommands;
 use serde::{Deserialize, Serialize};
-use twitter_v2::{authorization::BearerToken, TwitterApi};
+use twitter_v2::{authorization::Oauth1aToken, TwitterApi};
 use url::Url;
 
 const TWEET_LENGTH: usize = 280;
@@ -18,24 +18,27 @@ const TOOT_LENGTH: usize = 500;
 const MASTODON_FIXED_URL_LENGTH: usize = 23;
 const SMALL_COMMERCIAL_AT: &str = "﹫";
 
-#[derive(Deserialize, Debug)]
+#[derive(Deserialize)]
 struct IntervalConfig {
     post_ttl: usize,
     fetch_interval: u64,
     post_interval: u64,
 }
 
-#[derive(Deserialize, Debug)]
+#[derive(Deserialize)]
 struct RedisConfig {
     url: String,
 }
 
-#[derive(Deserialize, Debug, Clone)]
+#[derive(Deserialize, Clone)]
 struct TwitterConfig {
-    bearer_token: String,
+    consumer_key: String,
+    consumer_secret: String,
+    token: String,
+    secret: String,
 }
 
-#[derive(Deserialize, Debug, Clone)]
+#[derive(Deserialize, Clone)]
 struct MastodonConfig {
     instance_url: Url,
     access_token: String,
@@ -64,7 +67,7 @@ impl DenylistConfig {
     }
 }
 
-#[derive(Deserialize, Debug)]
+#[derive(Deserialize)]
 struct Config {
     interval: IntervalConfig,
     redis: RedisConfig,
@@ -217,7 +220,12 @@ async fn is_repo_posted(conn: &mut redis::aio::Connection, repo: &Repo) -> Resul
 }
 
 async fn tweet(config: &TwitterConfig, content: String) -> Result<()> {
-    let token = BearerToken::new(&config.bearer_token);
+    let token = Oauth1aToken::new(
+        &config.consumer_key,
+        &config.consumer_secret,
+        &config.token,
+        &config.secret,
+    );
     TwitterApi::new(token)
         .post_tweet()
         .text(content)
