@@ -216,8 +216,8 @@ async fn is_repo_posted(conn: &mut redis::aio::Connection, repo: &Repo) -> Resul
         .await?)
 }
 
-async fn tweet(config: TwitterConfig, content: String) -> Result<()> {
-    let token = BearerToken::new(config.bearer_token);
+async fn tweet(config: &TwitterConfig, content: String) -> Result<()> {
+    let token = BearerToken::new(&config.bearer_token);
     TwitterApi::new(token)
         .post_tweet()
         .text(content)
@@ -272,14 +272,16 @@ async fn main_loop(config: &Config, redis_conn: &mut redis::aio::Connection) -> 
 
         if let Some(config) = &config.twitter {
             let content = make_tweet(&repo);
-            tweet(config.clone(), content)
-                .await
-                .context("While tweeting")?;
+            if let Err(error) = tweet(config, content).await.context("While tweeting") {
+                error!("{:#?}", error);
+            }
         }
 
         if let Some(config) = &config.mastodon {
             let content = make_toot(&repo);
-            toot(config, &content).await.context("While tooting")?;
+            if let Err(error) = toot(config, &content).await.context("While tooting") {
+                error!("{:#?}", error);
+            }
         }
 
         mark_posted_repo(redis_conn, &repo, config.interval.post_ttl)
