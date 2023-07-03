@@ -9,12 +9,17 @@ url = "redis://localhost:6379/0"
 [twitter]
 consumer_key = ""
 consumer_secret = ""
-access_key = ""
-access_secret = ""
+token = ""
+secret = ""
 
 [mastodon]
-instance_url = ""
+instance_url = "https://mastodon.social"
 access_token = ""
+
+[bluesky]
+host = "https://bsky.social"
+identifier = "<handle>.bsky.social"
+password = ""
 
 [denylist]
 names = []

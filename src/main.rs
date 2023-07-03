@@ -2,19 +2,24 @@ use std::{
     convert::TryInto,
     fs::File,
     io::Read,
+    sync::Arc,
     time::{SystemTime, UNIX_EPOCH},
 };
 
 use anyhow::{Context, Result};
+use atrium_api::{app::bsky, client::AtpServiceClient, com::atproto};
+use bytes::Bytes;
 use log::{error, info};
 use once_cell::sync::Lazy;
 use redis::AsyncCommands;
 use serde::{Deserialize, Serialize};
+use time::OffsetDateTime;
 use twitter_v2::{authorization::Oauth1aToken, TwitterApi};
 use url::Url;
 
 const TWEET_LENGTH: usize = 280;
 const TOOT_LENGTH: usize = 500;
+const BLUESKY_POST_LENGTH: usize = 300;
 const MASTODON_FIXED_URL_LENGTH: usize = 23;
 const SMALL_COMMERCIAL_AT: &str = "﹫";
 
@@ -42,6 +47,13 @@ struct TwitterConfig {
 struct MastodonConfig {
     instance_url: Url,
     access_token: String,
+}
+
+#[derive(Deserialize, Clone)]
+struct BlueskyConfig {
+    host: String,
+    identifier: String,
+    password: String,
 }
 
 #[derive(Deserialize, Debug)]
@@ -75,6 +87,8 @@ struct Config {
     twitter: Option<TwitterConfig>,
     #[serde(default)]
     mastodon: Option<MastodonConfig>,
+    #[serde(default)]
+    bluesky: Option<BlueskyConfig>,
     denylist: DenylistConfig,
 }
 
@@ -164,12 +178,35 @@ async fn fetch_repos() -> Result<Vec<Repo>> {
     parse_trending(resp)
 }
 
-fn make_post_prefix(repo: &Repo) -> String {
+async fn get_github_og_image(repo: &Repo) -> Result<Bytes> {
+    static CLIENT: Lazy<reqwest::Client> = Lazy::new(reqwest::Client::new);
+
+    let url = format!(
+        "https://opengraph.githubassets.com/{}/{}/{}",
+        random_string::generate(64, "0123456789abcdefghijklmnopqrstuvwxyz"),
+        repo.author,
+        repo.name
+    );
+
+    Ok(CLIENT
+        .get(url)
+        .send()
+        .await?
+        .error_for_status()?
+        .bytes()
+        .await?)
+}
+
+fn make_repo_title(repo: &Repo) -> String {
     if repo.author != repo.name {
-        format!("{} / {}: ", repo.author, repo.name)
+        format!("{} / {}", repo.author, repo.name)
     } else {
-        format!("{}: ", repo.name)
+        repo.name.clone()
     }
+}
+
+fn make_post_prefix(repo: &Repo) -> String {
+    format!("{}: ", make_repo_title(repo))
 }
 
 fn make_post_stars(repo: &Repo) -> String {
@@ -178,6 +215,10 @@ fn make_post_stars(repo: &Repo) -> String {
 
 fn make_post_url(repo: &Repo) -> String {
     format!(" https://github.com/{}/{}", repo.author, repo.name)
+}
+
+fn repo_uri(repo: &Repo) -> String {
+    format!("https://github.com/{}/{}", repo.author, repo.name)
 }
 
 fn make_post_description(repo: &Repo, length_left: usize) -> String {
@@ -256,6 +297,86 @@ async fn toot(config: &MastodonConfig, content: &str) -> Result<()> {
     Ok(())
 }
 
+async fn post_bluesky(config: &BlueskyConfig, repo: &Repo) -> Result<()> {
+    let thumbnail = get_github_og_image(repo).await?;
+
+    let prefix = make_post_prefix(repo);
+    let stars = make_post_stars(repo);
+    let url = make_post_url(repo);
+
+    let length_left = BLUESKY_POST_LENGTH - (prefix.len() + stars.len() + url.len());
+
+    let description = make_post_description(repo, length_left);
+
+    let text = format!("{}{}{}{}", prefix, description, stars, url);
+
+    let client = AtpServiceClient::new(Arc::new(atrium_xrpc::client::reqwest::ReqwestClient::new(
+        config.host.clone(),
+    )));
+
+    let session = client
+        .com
+        .atproto
+        .server
+        .create_session(atproto::server::create_session::Input {
+            identifier: config.identifier.clone(),
+            password: config.password.clone(),
+        })
+        .await?;
+    let did = session.did.clone();
+
+    let mut client = atrium_api::agent::AtpAgent::new(
+        atrium_xrpc::client::reqwest::ReqwestClient::new(config.host.clone()),
+    );
+    client.set_session(session);
+
+    let blob = client
+        .api
+        .com
+        .atproto
+        .repo
+        .upload_blob(thumbnail.to_vec())
+        .await?
+        .blob;
+
+    client
+        .api
+        .com
+        .atproto
+        .repo
+        .create_record(atproto::repo::create_record::Input {
+            collection: "app.bsky.feed.post".to_string(),
+            record: atrium_api::records::Record::AppBskyFeedPost(Box::new(
+                bsky::feed::post::Record {
+                    created_at: OffsetDateTime::now_utc()
+                        .format(&time::format_description::well_known::Rfc3339)?,
+                    embed: Some(bsky::feed::post::RecordEmbedEnum::AppBskyEmbedExternalMain(
+                        Box::new(bsky::embed::external::Main {
+                            external: bsky::embed::external::External {
+                                description: repo.description.clone(),
+                                thumb: Some(blob),
+                                title: format!("{} / {}", repo.author, repo.name),
+                                uri: repo_uri(repo),
+                            },
+                        }),
+                    )),
+                    entities: None,
+                    facets: None,
+                    langs: None,
+                    reply: None,
+                    text,
+                },
+            )),
+            repo: did,
+            rkey: None,
+            swap_commit: None,
+            validate: None,
+        })
+        .await?;
+
+    Ok(())
+}
+
 async fn mark_posted_repo(
     conn: &mut redis::aio::Connection,
     repo: &Repo,
@@ -288,6 +409,15 @@ async fn main_loop(config: &Config, redis_conn: &mut redis::aio::Connection) -> 
         if let Some(config) = &config.mastodon {
             let content = make_toot(&repo);
             if let Err(error) = toot(config, &content).await.context("While tooting") {
+                error!("{:#?}", error);
+            }
+        }
+
+        if let Some(config) = &config.bluesky {
+            if let Err(error) = post_bluesky(config, &repo)
+                .await
+                .context("While posting to Bluesky")
+            {
                 error!("{:#?}", error);
             }
         }
