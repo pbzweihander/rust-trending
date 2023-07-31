@@ -15,6 +15,7 @@ use redis::AsyncCommands;
 use serde::{Deserialize, Serialize};
 use time::OffsetDateTime;
 use twitter_v2::{authorization::Oauth1aToken, TwitterApi};
+use unicode_segmentation::UnicodeSegmentation;
 use url::Url;
 
 const TWEET_LENGTH: usize = 280;
@@ -223,10 +224,16 @@ fn repo_uri(repo: &Repo) -> String {
 
 fn make_post_description(repo: &Repo, length_left: usize) -> String {
     let description = repo.description.replace('@', SMALL_COMMERCIAL_AT);
-    if repo.description.len() < length_left {
+    if repo.description.graphemes(true).count() < length_left {
         description
     } else {
-        format!("{} ...", description.split_at(length_left - 4).0)
+        format!(
+            "{} ...",
+            description
+                .graphemes(true)
+                .take(length_left - 4)
+                .collect::<String>()
+        )
     }
 }
 
