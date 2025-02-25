@@ -2,31 +2,28 @@ use std::{
     convert::TryInto,
     fs::File,
     io::Read,
-    sync::Arc,
     time::{SystemTime, UNIX_EPOCH},
 };
 
 use anyhow::{Context, Result};
-use atrium_api::{app::bsky, client::AtpServiceClient, com::atproto};
+use atrium_api::{app::bsky, com::atproto, types::TryIntoUnknown};
 use bytes::Bytes;
 use log::{error, info};
 use once_cell::sync::Lazy;
 use redis::AsyncCommands;
 use serde::{Deserialize, Serialize};
-use time::OffsetDateTime;
-use twitter_v2::{authorization::Oauth1aToken, TwitterApi};
 use unicode_segmentation::UnicodeSegmentation;
 use url::Url;
 
-const TWEET_LENGTH: usize = 280;
-const TOOT_LENGTH: usize = 500;
+const MASTODON_POST_LENGTH: usize = 500;
+const MISSKEY_POST_LENGTH: usize = 3000;
 const BLUESKY_POST_LENGTH: usize = 300;
 const MASTODON_FIXED_URL_LENGTH: usize = 23;
 const SMALL_COMMERCIAL_AT: &str = "﹫";
 
 #[derive(Deserialize)]
 struct IntervalConfig {
-    post_ttl: usize,
+    post_ttl: u64,
     fetch_interval: u64,
     post_interval: u64,
 }
@@ -37,15 +34,13 @@ struct RedisConfig {
 }
 
 #[derive(Deserialize, Clone)]
-struct TwitterConfig {
-    consumer_key: String,
-    consumer_secret: String,
-    token: String,
-    secret: String,
+struct MastodonConfig {
+    instance_url: Url,
+    access_token: String,
 }
 
 #[derive(Deserialize, Clone)]
-struct MastodonConfig {
+struct MisskeyConfig {
     instance_url: Url,
     access_token: String,
 }
@@ -68,15 +63,11 @@ impl DenylistConfig {
     fn contains(&self, repo: &Repo) -> bool {
         self.names.contains(&repo.name)
             || self.authors.contains(&repo.author)
-            || self
-                .descriptions
-                .iter()
-                .map(|description| {
-                    repo.description
-                        .to_lowercase()
-                        .contains(&description.to_lowercase())
-                })
-                .any(|b| b)
+            || self.descriptions.iter().any(|description| {
+                repo.description
+                    .to_lowercase()
+                    .contains(&description.to_lowercase())
+            })
     }
 }
 
@@ -85,9 +76,9 @@ struct Config {
     interval: IntervalConfig,
     redis: RedisConfig,
     #[serde(default)]
-    twitter: Option<TwitterConfig>,
-    #[serde(default)]
     mastodon: Option<MastodonConfig>,
+    #[serde(default)]
+    misskey: Option<MisskeyConfig>,
     #[serde(default)]
     bluesky: Option<BlueskyConfig>,
     denylist: DenylistConfig,
@@ -237,66 +228,74 @@ fn make_post_description(repo: &Repo, length_left: usize) -> String {
     }
 }
 
-fn make_tweet(repo: &Repo) -> String {
+fn make_mastodon_post(repo: &Repo) -> String {
     let prefix = make_post_prefix(repo);
     let stars = make_post_stars(repo);
     let url = make_post_url(repo);
 
-    let length_left = TWEET_LENGTH - (prefix.len() + stars.len() + url.len());
+    let length_left =
+        MASTODON_POST_LENGTH - (prefix.len() + stars.len() + MASTODON_FIXED_URL_LENGTH);
 
     let description = make_post_description(repo, length_left);
 
     format!("{}{}{}{}", prefix, description, stars, url)
 }
 
-fn make_toot(repo: &Repo) -> String {
+fn make_misskey_post(repo: &Repo) -> String {
     let prefix = make_post_prefix(repo);
     let stars = make_post_stars(repo);
     let url = make_post_url(repo);
 
-    let length_left = TOOT_LENGTH - (prefix.len() + stars.len() + MASTODON_FIXED_URL_LENGTH);
+    let length_left = MISSKEY_POST_LENGTH - (prefix.len() + stars.len() + url.len());
 
     let description = make_post_description(repo, length_left);
 
     format!("{}{}{}{}", prefix, description, stars, url)
 }
 
-async fn is_repo_posted(conn: &mut redis::aio::Connection, repo: &Repo) -> Result<bool> {
+async fn is_repo_posted(conn: &mut redis::aio::MultiplexedConnection, repo: &Repo) -> Result<bool> {
     Ok(conn
         .exists(format!("{}/{}", repo.author, repo.name))
         .await?)
 }
 
-async fn tweet(config: &TwitterConfig, content: String) -> Result<()> {
-    let token = Oauth1aToken::new(
-        &config.consumer_key,
-        &config.consumer_secret,
-        &config.token,
-        &config.secret,
-    );
-    TwitterApi::new(token)
-        .post_tweet()
-        .text(content)
-        .send()
-        .await?;
-    Ok(())
-}
-
 #[derive(Serialize, Debug)]
-struct PostStatusesBody<'a> {
+struct MastodonPostStatusesBody<'a> {
     status: &'a str,
     visibility: &'a str,
 }
 
-async fn toot(config: &MastodonConfig, content: &str) -> Result<()> {
+async fn post_mastodon(config: &MastodonConfig, content: &str) -> Result<()> {
     static CLIENT: Lazy<reqwest::Client> = Lazy::new(reqwest::Client::new);
     let url = config.instance_url.join("./api/v1/statuses")?;
     CLIENT
         .post(url)
         .bearer_auth(&config.access_token)
-        .form(&PostStatusesBody {
+        .form(&MastodonPostStatusesBody {
             status: content,
             visibility: "unlisted",
+        })
+        .send()
+        .await?
+        .error_for_status()?;
+    Ok(())
+}
+
+#[derive(Serialize, Debug)]
+struct MisskeyCreateNoteBody<'a> {
+    text: &'a str,
+    visibility: &'a str,
+}
+
+async fn post_misskey(config: &MisskeyConfig, content: &str) -> Result<()> {
+    static CLIENT: Lazy<reqwest::Client> = Lazy::new(reqwest::Client::new);
+    let url = config.instance_url.join("./api/notes/create")?;
+    CLIENT
+        .post(url)
+        .bearer_auth(&config.access_token)
+        .json(&MisskeyCreateNoteBody {
+            text: content,
+            visibility: "home",
         })
         .send()
         .await?
@@ -317,84 +316,86 @@ async fn post_bluesky(config: &BlueskyConfig, repo: &Repo) -> Result<()> {
 
     let text = format!("{}{}{}{}", prefix, description, stars, url);
 
-    let client = AtpServiceClient::new(Arc::new(atrium_xrpc::client::reqwest::ReqwestClient::new(
-        config.host.clone(),
-    )));
-
-    let session = client
-        .com
-        .atproto
-        .server
-        .create_session(atproto::server::create_session::Input {
-            identifier: config.identifier.clone(),
-            password: config.password.clone(),
-        })
-        .await?;
-    let did = session.did.clone();
-
-    let mut client = atrium_api::agent::AtpAgent::new(
-        atrium_xrpc::client::reqwest::ReqwestClient::new(config.host.clone()),
+    let agent = atrium_api::agent::atp_agent::AtpAgent::new(
+        atrium_xrpc_client::reqwest::ReqwestClient::new(config.host.clone()),
+        atrium_api::agent::atp_agent::store::MemorySessionStore::default(),
     );
-    client.set_session(session);
+    agent
+        .login(&config.identifier, &config.password)
+        .await
+        .context("failed to login to Bluesky")?;
+    let did = agent.did().await.unwrap();
 
-    let blob = client
+    let blob = agent
         .api
         .com
         .atproto
         .repo
         .upload_blob(thumbnail.to_vec())
-        .await?
-        .blob;
+        .await?;
 
-    client
+    agent
         .api
         .com
         .atproto
         .repo
-        .create_record(atproto::repo::create_record::Input {
-            collection: "app.bsky.feed.post".to_string(),
-            record: atrium_api::records::Record::AppBskyFeedPost(Box::new(
-                bsky::feed::post::Record {
-                    created_at: OffsetDateTime::now_utc()
-                        .format(&time::format_description::well_known::Rfc3339)?,
-                    embed: Some(bsky::feed::post::RecordEmbedEnum::AppBskyEmbedExternalMain(
-                        Box::new(bsky::embed::external::Main {
-                            external: bsky::embed::external::External {
-                                description: repo.description.clone(),
-                                thumb: Some(blob),
-                                title: format!("{} / {}", repo.author, repo.name),
-                                uri: repo_uri(repo),
-                            },
-                        }),
+        .create_record(
+            atproto::repo::create_record::InputData {
+                collection: atrium_api::types::string::Nsid::new("app.bsky.feed.post".to_string())
+                    .unwrap(),
+                record: bsky::feed::post::RecordData {
+                    created_at: atrium_api::types::string::Datetime::now(),
+                    embed: Some(atrium_api::types::Union::Refs(
+                        bsky::feed::post::RecordEmbedRefs::AppBskyEmbedExternalMain(Box::new(
+                            bsky::embed::external::MainData {
+                                external: bsky::embed::external::ExternalData {
+                                    description: repo.description.clone(),
+                                    thumb: Some(blob.data.blob),
+                                    title: format!("{} / {}", repo.author, repo.name),
+                                    uri: repo_uri(repo),
+                                }
+                                .into(),
+                            }
+                            .into(),
+                        )),
                     )),
                     entities: None,
                     facets: None,
+                    labels: None,
                     langs: None,
                     reply: None,
+                    tags: None,
                     text,
-                },
-            )),
-            repo: did,
-            rkey: None,
-            swap_commit: None,
-            validate: None,
-        })
+                }
+                .try_into_unknown()
+                .context("failed to convert record")?,
+                repo: did.into(),
+                rkey: None,
+                swap_commit: None,
+                validate: None,
+            }
+            .into(),
+        )
         .await?;
 
     Ok(())
 }
 
+#[allow(dependency_on_unit_never_type_fallback)]
 async fn mark_posted_repo(
-    conn: &mut redis::aio::Connection,
+    conn: &mut redis::aio::MultiplexedConnection,
     repo: &Repo,
-    ttl: usize,
+    ttl: u64,
 ) -> Result<()> {
     conn.set_ex(format!("{}/{}", repo.author, repo.name), now_ts(), ttl)
         .await?;
     Ok(())
 }
 
-async fn main_loop(config: &Config, redis_conn: &mut redis::aio::Connection) -> Result<()> {
+async fn main_loop(
+    config: &Config,
+    redis_conn: &mut redis::aio::MultiplexedConnection,
+) -> Result<()> {
     let repos = fetch_repos().await.context("While fetching repo")?;
 
     for repo in repos {
@@ -406,16 +407,22 @@ async fn main_loop(config: &Config, redis_conn: &mut redis::aio::Connection) -> 
             continue;
         }
 
-        if let Some(config) = &config.twitter {
-            let content = make_tweet(&repo);
-            if let Err(error) = tweet(config, content).await.context("While tweeting") {
+        if let Some(config) = &config.mastodon {
+            let content = make_mastodon_post(&repo);
+            if let Err(error) = post_mastodon(config, &content)
+                .await
+                .context("While posting to Mastodon")
+            {
                 error!("{:#?}", error);
             }
         }
 
-        if let Some(config) = &config.mastodon {
-            let content = make_toot(&repo);
-            if let Err(error) = toot(config, &content).await.context("While tooting") {
+        if let Some(config) = &config.misskey {
+            let content = make_misskey_post(&repo);
+            if let Err(error) = post_misskey(config, &content)
+                .await
+                .context("While posting to Misskey")
+            {
                 error!("{:#?}", error);
             }
         }
@@ -456,7 +463,7 @@ async fn main() -> Result<()> {
     let redis_client =
         redis::Client::open(config.redis.url.as_str()).context("While creating redis client")?;
     let mut redis_conn = redis_client
-        .get_async_connection()
+        .get_multiplexed_async_connection()
         .await
         .context("While connecting redis")?;
 
@@ -475,7 +482,7 @@ async fn main() -> Result<()> {
 
 #[cfg(test)]
 mod tests {
-    use super::{make_tweet, parse_trending, DenylistConfig, Repo};
+    use super::{parse_trending, DenylistConfig, Repo};
 
     const TEST_HTML: &str = include_str!("../testdata/test.html");
 
@@ -574,37 +581,6 @@ mod tests {
                     13092
                 ),
             ]
-        );
-    }
-
-    #[test]
-    fn test_make_tweet() {
-        assert_eq!(
-            make_tweet(&repo!(
-                "wez",
-                "wezterm",
-                "A GPU-accelerated cross-platform terminal emulator and multiplexer written by @wez and implemented in Rust",
-                5924
-            )),
-            "wez / wezterm: A GPU-accelerated cross-platform terminal emulator and multiplexer written by ﹫wez and implemented in Rust ★5924 https://github.com/wez/wezterm"
-        );
-        assert_eq!(
-            make_tweet(&repo!(
-                "AlfioEmanueleFresta",
-                "xdg-credentials-portal",
-                "FIDO2 (WebAuthn) and FIDO U2F platform library for Linux written in Rust; includes a proposal for a new D-Bus Portal interface for FIDO2, accessible from Flatpak apps and Snaps key",
-                192
-            )),
-            "AlfioEmanueleFresta / xdg-credentials-portal: FIDO2 (WebAuthn) and FIDO U2F platform library for Linux written in Rust; includes a proposal for a new D-Bus Portal interface for FIDO2, accessible from Flatpak ... ★192 https://github.com/AlfioEmanueleFresta/xdg-credentials-portal"
-        );
-        assert_eq!(
-            make_tweet(&repo!(
-                "meilisearch",
-                "meilisearch",
-                "A lightning-fast search engine that fits effortlessly into your apps, websites, and workflow.",
-                30388
-            )),
-            "meilisearch: A lightning-fast search engine that fits effortlessly into your apps, websites, and workflow. ★30388 https://github.com/meilisearch/meilisearch"
         );
     }
 }

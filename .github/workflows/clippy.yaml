@@ -2,21 +2,17 @@ name: clippy
 
 on:
   push:
+    branches:
+    - main
   pull_request:
 
 jobs:
   clippy:
     runs-on: ubuntu-latest
     steps:
-    - uses: actions/checkout@v2
-    - uses: actions-rs/toolchain@v1
-      with:
-        profile: minimal
-        toolchain: stable
-        components: clippy
-    - uses: Swatinem/rust-cache@v1
-    - name: Check clippy
-      uses: actions-rs/clippy-check@v1
-      with:
-        token: ${{ secrets.GITHUB_TOKEN }}
-        args: --no-deps -- -D warnings
+    - run: |
+        rustup toolchain install stable --profile minimal --component clippy
+    - uses: actions/checkout@v4
+    - uses: Swatinem/rust-cache@v2
+    - run: |
+        cargo clippy --no-deps -- -D warnings

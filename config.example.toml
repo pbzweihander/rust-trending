@@ -6,14 +6,12 @@ post_interval = 60
 [redis]
 url = "redis://localhost:6379/0"
 
-[twitter]
-consumer_key = ""
-consumer_secret = ""
-token = ""
-secret = ""
-
 [mastodon]
 instance_url = "https://mastodon.social"
+access_token = ""
+
+[misskey]
+instance_url = "https://misskey.io"
 access_token = ""
 
 [bluesky]

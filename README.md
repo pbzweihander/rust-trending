@@ -2,9 +2,9 @@
 
 <img src="logo.svg" alt="RustTrending" width="300px">
 
-A Twitter and Mastodon bot to post [trending rust repositories](https://github.com/trending/rust), inspired by [@TrendingGithub] and [@pythontrending].
+A Fediverse and Bluesky bot to post [trending rust repositories](https://github.com/trending/rust), inspired by [@TrendingGithub] and [@pythontrending].
 
-Check out in [Twitter], [Mastodon] and [Bluesky]!
+Check out in [Fediverse] and [Bluesky]!
 
 ## Usage
 
@@ -36,12 +36,8 @@ docker-compose up -d
 
 This project is licensed under the terms of [MIT license][License].
 
-[MIT License Badge]: https://badgen.net/badge/license/MIT/green
 [License]: LICENSE
-[Twitter Badge]: https://badgen.net/twitter/follow/RustTrending
-[Mastodon Badge]: https://badgen.net/mastodon/follow/RustTrending@pbzweihander.dev
 [@TrendingGithub]: https://twitter.com/TrendingGithub
 [@pythontrending]: https://twitter.com/pythontrending
-[Twitter]: https://twitter.com/RustTrending
-[Mastodon]: https://botsin.space/@RustTrending
+[Fediverse]: https://yuri.garden/@RustTrending
 [Bluesky]: https://bsky.app/profile/rusttrending.bsky.social

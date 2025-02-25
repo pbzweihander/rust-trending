@@ -2,19 +2,17 @@ name: test
 
 on:
   push:
+    branches:
+    - main
   pull_request:
 
 jobs:
   test:
     runs-on: ubuntu-latest
     steps:
-    - uses: actions/checkout@v2
-    - uses: actions-rs/toolchain@v1
-      with:
-        profile: minimal
-        toolchain: stable
-    - uses: Swatinem/rust-cache@v1
-    - name: Run tests
-      uses: actions-rs/cargo@v1
-      with:
-        command: test
+    - run: |
+        rustup toolchain install stable --profile minimal --component clippy
+    - uses: actions/checkout@v4
+    - uses: Swatinem/rust-cache@v2
+    - run:
+        cargo test

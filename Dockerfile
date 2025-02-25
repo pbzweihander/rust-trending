@@ -1,13 +1,10 @@
-FROM --platform=linux/amd64 messense/rust-musl-cross:x86_64-musl AS amd64
-COPY . .
-RUN cargo install --path . --root /x
+FROM docker.io/rust:1.85-bookworm
+WORKDIR /app
+COPY Cargo.toml .
+COPY Cargo.lock .
+COPY src src
+RUN cargo build --release --locked
 
-FROM --platform=linux/amd64 messense/rust-musl-cross:aarch64-musl AS arm64
-COPY . .
-RUN cargo install --path . --root /x
-
-FROM ${TARGETARCH} AS build
-
-FROM alpine
-COPY --from=build /x/bin/rust-trending /usr/local/bin/rust-trending
+FROM docker.io/debian:bookworm
+COPY --from=build /app/target/release/rust-trending /usr/local/bin/
 CMD ["rust-trending"]
