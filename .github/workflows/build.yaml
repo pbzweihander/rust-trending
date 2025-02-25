@@ -36,5 +36,6 @@ jobs:
         push: ${{ github.ref == 'refs/heads/main' }}
         cache-to: type=gha
         cache-from: type=gha,mode=max
+        platforms: ${{ github.ref == 'refs/heads/main' && github.event_name != 'pull_request' && 'linux/amd64,linux/arm64' || 'linux/amd64' }}
         tags: ${{ steps.meta.outputs.tags }}
         labels: ${{ steps.meta.outputs.labels }}
