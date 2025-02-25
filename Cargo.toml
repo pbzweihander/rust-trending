@@ -10,13 +10,11 @@ license = "MIT"
 [dependencies]
 anyhow = "1.0.96"
 atrium-api = "0.25.0"
-atrium-xrpc = "0.12.1"
-atrium-xrpc-client = { version = "0.5.11", features = ["reqwest"] }
+atrium-xrpc-client = { version = "0.5.11", features = ["reqwest"], default-features = false }
 bytes = "1.10.0"
 env_logger = "0.11.6"
 log = "0.4.26"
 once_cell = "1.20.3"
-openssl = { version = "0.10.71", features = ["vendored"] }
 random-string = "1.1.0"
 redis = { version = "0.29.0", features = ["tokio-comp"] }
 reqwest = { version = "0.12.12", features = ["rustls-tls", "json"], default-features = false }
