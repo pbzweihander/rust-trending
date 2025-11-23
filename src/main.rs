@@ -1,4 +1,5 @@
 use std::{
+    collections::HashSet,
     convert::TryInto,
     fs::File,
     io::Read,
@@ -84,8 +85,7 @@ struct Config {
     denylist: DenylistConfig,
 }
 
-#[derive(Deserialize, Debug)]
-#[cfg_attr(test, derive(Clone, PartialEq, Eq))]
+#[derive(Deserialize, Debug, Clone, Hash, PartialEq, Eq)]
 struct Repo {
     author: String,
     description: String,
@@ -163,11 +163,26 @@ fn parse_trending(html: String) -> Result<Vec<Repo>> {
 }
 
 async fn fetch_repos() -> Result<Vec<Repo>> {
-    let resp = reqwest::get("https://github.com/trending/rust?since=daily")
+    let daily = reqwest::get("https://github.com/trending/rust?since=daily")
         .await?
         .text()
         .await?;
-    parse_trending(resp)
+    let daily = parse_trending(daily)?;
+    let weekly = reqwest::get("https://github.com/trending/rust?since=weekly")
+        .await?
+        .text()
+        .await?;
+    let weekly = parse_trending(weekly)?;
+    let monthly = reqwest::get("https://github.com/trending/rust?since=monthly")
+        .await?
+        .text()
+        .await?;
+    let monthly = parse_trending(monthly)?;
+    let mut repos = HashSet::new();
+    repos.extend(daily);
+    repos.extend(weekly);
+    repos.extend(monthly);
+    Ok(repos.into_iter().collect())
 }
 
 async fn get_github_og_image(repo: &Repo) -> Result<Bytes> {
