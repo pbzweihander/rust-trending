@@ -1,6 +1,4 @@
 use std::{
-    collections::HashSet,
-    convert::TryInto,
     fs::File,
     io::Read,
     time::{SystemTime, UNIX_EPOCH},
@@ -12,6 +10,7 @@ use bytes::Bytes;
 use log::{error, info};
 use once_cell::sync::Lazy;
 use redis::AsyncCommands;
+use rust_trending::*;
 use serde::{Deserialize, Serialize};
 use unicode_segmentation::UnicodeSegmentation;
 use url::Url;
@@ -85,14 +84,6 @@ struct Config {
     denylist: DenylistConfig,
 }
 
-#[derive(Deserialize, Debug, Clone, Hash, PartialEq, Eq)]
-struct Repo {
-    author: String,
-    description: String,
-    name: String,
-    stars: usize,
-}
-
 #[inline]
 fn now_ts() -> u64 {
     SystemTime::now()
@@ -106,83 +97,6 @@ fn read_config(path: &str) -> Result<Config> {
     let mut content = String::new();
     file.read_to_string(&mut content)?;
     Ok(toml::from_str(&content)?)
-}
-
-fn parse_trending(html: String) -> Result<Vec<Repo>> {
-    // Reference: https://github.com/huchenme/github-trending-api/blob/cf898c27850be407fb3f8dd31a4d1c3256ec6e12/src/functions/utils/fetch.js#L30-L103
-
-    let html = scraper::Html::parse_document(&html);
-    let repos = html
-        .select(&".Box article.Box-row".try_into().unwrap())
-        .filter_map(|repo| {
-            let title = repo
-                .select(&".h3".try_into().unwrap())
-                .next()?
-                .text()
-                .fold(String::new(), |acc, s| acc + s);
-            let mut title_split = title.split('/');
-
-            let author = title_split.next()?.trim().to_string();
-            let name = title_split.next()?.trim().to_string();
-
-            let description = repo
-                .select(&"p.my-1".try_into().unwrap())
-                .next()
-                .map(|e| {
-                    e.text()
-                        .fold(String::new(), |acc, s| acc + s)
-                        .trim()
-                        .to_string()
-                })
-                .unwrap_or_default();
-
-            let stars_text = repo
-                .select(&".mr-3 svg[aria-label='star']".try_into().unwrap())
-                .next()
-                .and_then(|e| e.parent())
-                .and_then(scraper::ElementRef::wrap)
-                .map(|e| {
-                    e.text()
-                        .fold(String::new(), |acc, s| acc + s)
-                        .trim()
-                        .replace(',', "")
-                })
-                .unwrap_or_default();
-            let stars = stars_text.parse().unwrap_or(0);
-
-            Some(Repo {
-                author,
-                description,
-                name,
-                stars,
-            })
-        })
-        .collect();
-
-    Ok(repos)
-}
-
-async fn fetch_repos() -> Result<Vec<Repo>> {
-    let daily = reqwest::get("https://github.com/trending/rust?since=daily")
-        .await?
-        .text()
-        .await?;
-    let daily = parse_trending(daily)?;
-    let weekly = reqwest::get("https://github.com/trending/rust?since=weekly")
-        .await?
-        .text()
-        .await?;
-    let weekly = parse_trending(weekly)?;
-    let monthly = reqwest::get("https://github.com/trending/rust?since=monthly")
-        .await?
-        .text()
-        .await?;
-    let monthly = parse_trending(monthly)?;
-    let mut repos = HashSet::new();
-    repos.extend(daily);
-    repos.extend(weekly);
-    repos.extend(monthly);
-    Ok(repos.into_iter().collect())
 }
 
 async fn get_github_og_image(repo: &Repo) -> Result<Bytes> {
