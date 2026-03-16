@@ -39,7 +39,7 @@ pub fn parse_trending(html: String) -> anyhow::Result<Vec<Repo>> {
                 .unwrap_or_default();
 
             let stars_text = repo
-                .select(&".mr-3 svg[aria-label='star']".try_into().unwrap())
+                .select(&"svg[aria-label='star']".try_into().unwrap())
                 .next()
                 .and_then(|e| e.parent())
                 .and_then(scraper::ElementRef::wrap)
